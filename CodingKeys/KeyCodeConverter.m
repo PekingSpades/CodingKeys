@@ -72,6 +72,7 @@
 static CGKeyCode keyCodeForChar(const char c) {
     static CFMutableDictionaryRef charToCodeDict = NULL;
     CGKeyCode code;
+    const void *codeValue = NULL;
     UniChar character = c;
     CFStringRef charStr = NULL;
     
@@ -95,27 +96,40 @@ static CGKeyCode keyCodeForChar(const char c) {
     }
     
     charStr = CFStringCreateWithCharacters(kCFAllocatorDefault, &character, 1);
-    
-    if (!CFDictionaryGetValueIfPresent(charToCodeDict, charStr, (const void **)&code)) {
+    if (charStr == NULL) {
+        return UINT16_MAX;
+    }
+
+    if (CFDictionaryGetValueIfPresent(charToCodeDict, charStr, &codeValue)) {
+        code = (CGKeyCode)(uintptr_t)codeValue;
+    } else {
         code = UINT16_MAX;
     }
-    
+
     CFRelease(charStr);
-    
+
     return code;
 }
 
 static CFStringRef createStringForKey(CGKeyCode keyCode) {
     TISInputSourceRef currentKeyboard = TISCopyCurrentKeyboardInputSource();
+    if (currentKeyboard == NULL) {
+        return NULL;
+    }
+
     CFDataRef layoutData = TISGetInputSourceProperty(currentKeyboard,
                                                      kTISPropertyUnicodeKeyLayoutData);
-    
+    if (layoutData == NULL) {
+        CFRelease(currentKeyboard);
+        return NULL;
+    }
+
     const UCKeyboardLayout *keyboardLayout = (const UCKeyboardLayout *)CFDataGetBytePtr(layoutData);
-    
+
     UInt32 keysDown = 0;
     UniChar chars[4];
     UniCharCount realLength;
-    
+
     UCKeyTranslate(keyboardLayout,
                    keyCode,
                    kUCKeyActionDisplay,
@@ -127,7 +141,7 @@ static CFStringRef createStringForKey(CGKeyCode keyCode) {
                    &realLength,
                    chars);
     CFRelease(currentKeyboard);
-    
+
     return CFStringCreateWithCharacters(kCFAllocatorDefault, chars, 1);
 }
 
